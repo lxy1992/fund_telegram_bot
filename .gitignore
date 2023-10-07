@@ -1,0 +1,13 @@
+# idea ignore
+.idea/
+dist/
+*.ipr
+*.iml
+*.iws
+.DS_Store
+
+# project ignore
+local_test.py
+logs
+*.log
+*.pyc
