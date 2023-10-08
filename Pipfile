@@ -9,6 +9,7 @@ requests = "*"
 apscheduler = "*"
 python-telegram-bot = "*"
 aiomysql = "*"
+pyyaml = "*"
 
 [dev-packages]
 

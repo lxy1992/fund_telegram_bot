@@ -1,8 +1,7 @@
 import datetime
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Column, DateTime, Float, Integer, Numeric, String
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
 
 Base = declarative_base()
 
@@ -32,6 +31,7 @@ class FundDetail(Base):
     million_copies_income = Column(Float)
     million_copies_income_date = Column(DateTime)
     seven_days_year_income = Column(Float)
+    deleted_at = Column(DateTime, nullable=True, default=None)
 
 
 class UserFund(Base):
@@ -43,4 +43,4 @@ class UserFund(Base):
     subscribed_at = Column(DateTime, index=True, default=datetime.datetime.now())
     unsubscribed_at = Column(DateTime, nullable=True, default=None)
     shares = Column(Numeric, default=0.00)
-
+    fund_name = Column(String, nullable=True)

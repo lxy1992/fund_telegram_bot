@@ -1,0 +1,8 @@
+database:
+    url: ""
+
+telegram_bot:
+    token: ""
+
+fund_api:
+    base_url: "https://api.doctorxiong.club/v1/fund"

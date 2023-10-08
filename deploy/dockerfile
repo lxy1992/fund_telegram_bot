@@ -1,0 +1,34 @@
+# 使用 docker.io 加速地址下载基础镜像
+FROM docker.io/library/python:3.10-buster
+
+# - 默认指定工作目录为 /app
+WORKDIR /app
+
+# - 设置 Python 环境变量, ElasticAPM 环境变量
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH="/app:${PYTHONPATH}" \
+    PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple" \
+    C_FORCE_ROOT=1 \
+
+# - 更换源，构建基础环境
+RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone && dpkg-reconfigure -f noninteractive tzdata && \
+    echo "deb https://mirrors.aliyun.com/debian/ buster main non-free contrib" > /etc/apt/sources.list && \
+    echo "deb-src https://mirrors.aliyun.com/debian/ buster main non-free contrib" >> /etc/apt/sources.list && \
+    apt-get update && apt-get -y dist-upgrade && \
+    apt-get -y install make git net-tools && \
+    pip install -U pipenv pip && pipenv --python 3
+
+
+COPY Pipfile Pipfile.lock ./
+
+RUN mkdir -p /var/log/fund && pipenv sync --system
+
+# Set the working directory to /app
+WORKDIR /app
+
+# Copy the current directory contents into the container at /app
+COPY . /app
+
+# Run telebot.py when the container launches
+CMD ["python", "main.py"]

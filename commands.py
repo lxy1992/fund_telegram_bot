@@ -1,16 +1,24 @@
 import asyncio
 import datetime
+import decimal
 import ssl
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 
 import requests
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, delete, distinct, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from telegram import Bot
 
+from config import load_config
 from models import FundDetail, UserFund
 
-DATABASE_URL = ("")
+config = load_config("config.yml")
+db_config = config['database']
+bot_config = config['telegram_bot']
+TOKEN = bot_config['token']
+
+DATABASE_URL = db_config['url']
 # SSL参数
 ssl_args = {
     'ssl': ssl.create_default_context(cafile='cacert.pem')
@@ -54,7 +62,7 @@ class FundApi:
 
         response = requests.get(f"{FundApi.BASE_URL}/detail/list", params=params)
         if response.status_code == 200:
-            return response.json()
+            return response.json()["data"]
         else:
             response.raise_for_status()
 
@@ -71,7 +79,7 @@ async def subscribe_user_fund(user_id, fund_code, shares):
             await session.execute(
                 update(UserFund).
                 where(and_(UserFund.user_id == user_id, UserFund.fund_code == fund_code)).
-                values(shares=shares)
+                values(shares=shares, unsubscribed_at=None)
             )
             message = "份数已更新"
         else:
@@ -91,11 +99,7 @@ async def subscribe_user_fund(user_id, fund_code, shares):
 async def fetch_and_update_fund_data(fund_code):
     fund_api = FundApi()
     fund_data = fund_api.get_fund_details([fund_code])  # 假设get_fund_data是异步的并返回基金数据
-    if fund_data["code"] != 200:
-        # 处理API调用中的错误...
-        return
-    print(fund_data)
-    data = fund_data["data"][0]
+    data = fund_data[0]
     async with async_session() as session:
         # 更新或插入基金数据到FundDetail表
         # 你可能需要根据实际的API响应调整字段映射
@@ -125,6 +129,13 @@ async def fetch_and_update_fund_data(fund_code):
         # 在这里你可能需要一个更复杂的逻辑来处理数据更新
         # 例如，如果数据已存在，你可能想更新它而不是插入一个新的记录
         await session.merge(fund_detail)  # 使用merge来处理可能的更新
+        # 更新UserFund表中的fund_name字段
+        await session.execute(
+            update(UserFund).
+            where(UserFund.fund_code == fund_code).
+            where(or_(UserFund.fund_name == None, UserFund.fund_name == '')).
+            values(fund_name=data["name"])
+        )
         await session.commit()
 
 
@@ -132,29 +143,44 @@ async def get_daily_report(user_id):
     async with async_session() as session:
         # 获取用户订阅的基金
         subscribed_funds = await session.execute(
-            select(UserFund.fund_code, UserFund.shares).where(UserFund.user_id == user_id)
+            select(UserFund.fund_code, UserFund.shares).where(
+                UserFund.user_id == user_id, UserFund.unsubscribed_at.is_(None))
         )
-        # subscribed_funds = subscribed_funds.scalars().all()
+        subscribed_funds_list = subscribed_funds.all()
 
         report = []
         total_amount = 0
+        if len(subscribed_funds_list) == 0:
+            return "您当前没有订阅任何基金。"
 
         # 获取基金详情并计算涨跌金额
-        for fund in subscribed_funds:
+        for fund in subscribed_funds_list:
+            fund_code, shares = fund
             fund_detail = await session.execute(
-                select(FundDetail).where(FundDetail.code == fund.fund_code)
+                select(FundDetail).where(FundDetail.code == fund_code)
             )
             fund_detail = fund_detail.scalar_one()
 
-            # todo 计算涨跌金额，这里你可能需要根据实际的业务逻辑进行调整
-            change_amount = fund.shares * (Decimal(str(fund_detail.expect_worth)) - Decimal(str(fund_detail.net_worth)))
+            # 计算估计的涨跌金额
+            expect_worth = Decimal(str(fund_detail.expect_worth))
+            expect_growth = Decimal(str(fund_detail.expect_growth)) / 100
+            expect_yesterday_worth = (expect_worth / (1 + expect_growth)).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
+            expect_growth_value = (expect_yesterday_worth * expect_growth).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
+            expect_change_amount = (shares * expect_growth_value).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
+            # 计算实际的涨跌金额
+            net_worth = Decimal(str(fund_detail.net_worth))
+            day_growth = Decimal(str(fund_detail.day_growth)) / decimal.Decimal(100)
+            yesterday_worth = (net_worth / (1 + day_growth)).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
+            real_growth_value = (yesterday_worth * day_growth).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
+            change_amount = (shares * real_growth_value).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
 
             # 添加到报告中
             report.append({
                 "fund_code": fund.fund_code,
                 "fund_name": fund_detail.name,
                 "change_amount": change_amount,
-                "shares": fund.shares,
+                "expect_change_amount": expect_change_amount,
+                "shares": shares,
                 "expect_worth": fund_detail.expect_worth,
                 "net_worth": fund_detail.net_worth,
             })
@@ -162,15 +188,109 @@ async def get_daily_report(user_id):
             # 计算总金额
             total_amount += change_amount
         # 格式化报告并返回给用户
-        message = "日报：\n"
+        message = "日报：\n---------------------\n"
         for item in report:
             message += (
-                f"{item['fund_name']}({item['fund_code']}): "
-                f"涨跌金额={item['change_amount']}, "
-                f"持有份数={item['shares']}, "
-                f"预估净值={item['expect_worth']}, "
+                f"{item['fund_name']}({item['fund_code']}): \n"
+                f"实际涨跌金额={item['change_amount']}元, \n"
+                f"预估涨跌金额={item['expect_change_amount']}元, \n"
+                f"持有份数={item['shares']}, \n"
+                f"预估净值={item['expect_worth']}, \n"
                 f"实际净值={item['net_worth']}\n"
+                "---------------------\n"
             )
-        message += f"总金额：{total_amount}"
+        message += f"总金额：{total_amount}元"
 
         return message
+
+
+async def get_all_fund_codes_from_db():
+    async with async_session() as session:
+        stmt = select(FundDetail.code).where(FundDetail.deleted_at.is_(None))
+        result = await session.execute(stmt)
+        # 将结果转换为列表
+        fund_codes = [row[0] for row in result.fetchall()]
+    return fund_codes
+
+
+async def update_fund_detail_in_db(fund_data):
+    async with async_session() as session:
+        # 构建更新语句
+        stmt = (
+            update(FundDetail).
+            where(FundDetail.code == fund_data["code"]).
+            values(
+                name=fund_data["name"],
+                type=fund_data["type"],
+                net_worth=fund_data["netWorth"],
+                expect_worth=fund_data["expectWorth"],
+                total_worth=fund_data["totalWorth"],
+                expect_growth=fund_data["expectGrowth"],
+                day_growth=fund_data["dayGrowth"],
+                last_week_growth=fund_data["lastWeekGrowth"],
+                last_month_growth=fund_data["lastMonthGrowth"],
+                last_three_months_growth=fund_data["lastThreeMonthsGrowth"],
+                last_six_months_growth=fund_data["lastSixMonthsGrowth"],
+                last_year_growth=fund_data["lastYearGrowth"],
+                buy_min=float(fund_data["buyMin"]),
+                buy_source_rate=float(fund_data["buySourceRate"]),
+                buy_rate=float(fund_data["buyRate"]),
+                manager=fund_data["manager"],
+                fund_scale=fund_data["fundScale"],
+                worth_date=datetime.datetime.strptime(fund_data["netWorthDate"], "%Y-%m-%d"),
+                # 如果API返回其他日期字段，也按照上面的方式处理
+            )
+        )
+        # 执行更新语句
+        await session.execute(stmt)
+        # 提交事务
+        await session.commit()
+
+
+async def get_subscribers():
+    async with async_session() as session:
+        # 查询所有不同的用户ID
+        result = await session.execute(select(distinct(UserFund.user_id)))
+        subscribers = [row[0] for row in result]
+        return subscribers
+
+
+async def send_message_to_user(user_id, message):
+    bot = Bot(token=TOKEN)  # 使用你的 Telegram bot token
+
+    await bot.send_message(chat_id=user_id, text=message)
+
+
+async def list_subscriptions_for_user(user_id):
+    async with async_session() as session:
+        # 查询用户订阅的所有基金
+        stmt = select(UserFund).where(UserFund.user_id == user_id, UserFund.unsubscribed_at.is_(None))
+        result = await session.execute(stmt)
+        subscriptions = result.scalars().all()
+
+        if not subscriptions:
+            return "您当前没有订阅任何基金。"
+
+        message = "您当前订阅的基金：\n"
+        for sub in subscriptions:
+            message += f"基金代码：{sub.fund_code}, 基金名称：{sub.fund_name}, 份额：{sub.shares}\n"
+
+        return message
+
+
+async def unsubscribe_user_fund(user_id, fund_code):
+    async with async_session() as session:
+        # 查询并删除用户订阅的基金
+        stmt = (
+            update(UserFund)
+            .where(UserFund.user_id == user_id)
+            .where(UserFund.fund_code == fund_code)
+            .values(unsubscribed_at=datetime.datetime.now())
+        )
+        result = await session.execute(stmt)
+
+        if result.rowcount == 0:
+            return f"未找到代码为 {fund_code} 的订阅。"
+
+        await session.commit()
+        return f"已取消订阅代码为 {fund_code} 的基金。"
