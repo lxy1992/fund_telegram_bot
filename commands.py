@@ -1,16 +1,21 @@
 import asyncio
 import datetime
+import decimal
 import ssl
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 
 import requests
 from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+from config import load_config
 from models import FundDetail, UserFund
 
-DATABASE_URL = ("")
+config = load_config("config.yml")
+db_config = config['database']
+
+DATABASE_URL = db_config['url']
 # SSL参数
 ssl_args = {
     'ssl': ssl.create_default_context(cafile='cacert.pem')
@@ -146,14 +151,25 @@ async def get_daily_report(user_id):
             )
             fund_detail = fund_detail.scalar_one()
 
-            # todo 计算涨跌金额，这里你可能需要根据实际的业务逻辑进行调整
-            change_amount = fund.shares * (Decimal(str(fund_detail.expect_worth)) - Decimal(str(fund_detail.net_worth)))
+            # 计算估计的涨跌金额
+            expect_worth = Decimal(str(fund_detail.expect_worth))
+            expect_growth = Decimal(str(fund_detail.expect_growth)) / 100
+            expect_yesterday_worth = (expect_worth / (1 + expect_growth)).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
+            expect_growth_value = (expect_yesterday_worth * expect_growth).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
+            expect_change_amount = (fund.shares * expect_growth_value).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
+            # 计算实际的涨跌金额
+            net_worth = Decimal(str(fund_detail.net_worth))
+            day_growth = Decimal(str(fund_detail.day_growth)) / decimal.Decimal(100)
+            yesterday_worth = (net_worth / (1 + day_growth)).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
+            real_growth_value = (yesterday_worth * day_growth).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
+            change_amount = (fund.shares * real_growth_value).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
 
             # 添加到报告中
             report.append({
                 "fund_code": fund.fund_code,
                 "fund_name": fund_detail.name,
                 "change_amount": change_amount,
+                "expect_change_amount": expect_change_amount,
                 "shares": fund.shares,
                 "expect_worth": fund_detail.expect_worth,
                 "net_worth": fund_detail.net_worth,
@@ -162,15 +178,17 @@ async def get_daily_report(user_id):
             # 计算总金额
             total_amount += change_amount
         # 格式化报告并返回给用户
-        message = "日报：\n"
+        message = "日报：\n---------------------\n"
         for item in report:
             message += (
-                f"{item['fund_name']}({item['fund_code']}): "
-                f"涨跌金额={item['change_amount']}, "
-                f"持有份数={item['shares']}, "
-                f"预估净值={item['expect_worth']}, "
+                f"{item['fund_name']}({item['fund_code']}): \n"
+                f"实际涨跌金额={item['change_amount']}元, \n"
+                f"预估涨跌金额={item['expect_change_amount']}元, \n"
+                f"持有份数={item['shares']}, \n"
+                f"预估净值={item['expect_worth']}, \n"
                 f"实际净值={item['net_worth']}\n"
+                "---------------------\n"
             )
-        message += f"总金额：{total_amount}"
+        message += f"总金额：{total_amount}元"
 
         return message

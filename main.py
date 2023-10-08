@@ -6,9 +6,13 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 from commands import FundApi, get_daily_report, subscribe_user_fund
+from config import load_config
 
-TOKEN = ''
-BASE_URL = 'https://api.doctorxiong.club/v1/fund'  # 请替换为实际的API基础URL
+config = load_config("config.yml")
+# Telegram bot配置
+bot_config = config['telegram_bot']
+TOKEN = bot_config['token']
+BASE_URL = config["fund_api"]["base_url"]
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -71,7 +75,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
-
     search_handler = CommandHandler('search', search)
     subscribe_handler = CommandHandler('subscribe', subscribe)
     application.add_handler(search_handler)
