@@ -1,4 +1,4 @@
-# 基金 Bot
+# 基金 Telegram Bot
 
 ## 项目目的
 
