@@ -94,12 +94,12 @@ async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
-        "/subscribe <fund_code> <shares> - 订阅一个基金并设置购买的份额。\n"
-        "/unsubscribe <fund_code> - 取消订阅一个基金。\n"
+        "/subscribe 或 /sub <fund_code> <shares> - 订阅一个基金并设置购买的份额。\n"
+        "/unsubscribe 或 /unsub <fund_code> - 取消订阅一个基金。\n"
         "/list - 列出你当前订阅的所有基金。\n"
-        "/search <keyword> - 使用关键字搜索基金。\n"
-        "/daily_report - 获取你订阅的基金的每日报告。\n"
-        "/help - 显示这个帮助消息。"
+        "/search 或 /s <keyword> - 使用关键字搜索基金。\n"
+        "/daily_report 或 /repo - 获取你订阅的基金的每日报告。\n"
+        "/help 或 /h - 显示这个帮助消息。"
     )
     await context.bot.send_message(chat_id=update.effective_chat.id, text=help_text)
 
@@ -108,12 +108,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "欢迎使用我们的基金订阅Bot！🎉\n\n"
         "你可以使用以下命令来与我互动：\n"
-        "/subscribe <fund_code> <shares> - 订阅一个基金并设置购买的份额。\n"
-        "/unsubscribe <fund_code> - 取消订阅一个基金。\n"
+        "/subscribe 或 /sub <fund_code> <shares> - 订阅一个基金并设置购买的份额。\n"
+        "/unsubscribe 或 /unsub <fund_code> - 取消订阅一个基金。\n"
         "/list - 列出你当前订阅的所有基金。\n"
-        "/search <keyword> - 使用关键字搜索基金。\n"
-        "/daily_report - 获取你订阅的基金的每日报告。\n"
-        "/help - 显示帮助消息。\n\n"
+        "/search 或 /s <keyword> - 使用关键字搜索基金。\n"
+        "/daily_report 或 / repo - 获取你订阅的基金的每日报告。\n"
+        "/help 或 /h - 显示帮助消息。\n\n"
         "如果你有任何问题或建议，随时告诉我们！"
     )
     await context.bot.send_message(chat_id=update.effective_chat.id, text=welcome_text)
@@ -121,12 +121,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
-    search_handler = CommandHandler('search', search)
-    subscribe_handler = CommandHandler('subscribe', subscribe)
-    daily_report_handler = CommandHandler('daily_report', daily_report)
+    search_handler = CommandHandler(['search', 's'], search)
+    subscribe_handler = CommandHandler(['subscribe', 'sub'], subscribe)
+    daily_report_handler = CommandHandler(['daily_report', 'repo'], daily_report)
     list_subscriptions_handler = CommandHandler('list', list_subscriptions)
-    unsubscribe_handler = CommandHandler('unsubscribe', unsubscribe)
-    help_handler = CommandHandler('help', help_command)
+    unsubscribe_handler = CommandHandler(['unsubscribe', 'unsub'], unsubscribe)
+    help_handler = CommandHandler(['help', 'h'], help_command)
     start_handler = CommandHandler('start', start_command)
     application.add_handler(start_handler)
     application.add_handler(help_handler)
@@ -142,7 +142,7 @@ if __name__ == '__main__':
     # 添加一个定时任务，从早上9点到下午4点，每小时运行一次update_fund_details函数
     scheduler.add_job(update_fund_details, 'cron', day_of_week='mon-fri', hour='9-16', minute=0)
     # 添加一个定时任务，每天下午2点运行 send_daily_report_to_subscribers 函数
-    scheduler.add_job(send_daily_report_to_subscribers, 'cron', hour=14, minute=0)
+    scheduler.add_job(send_daily_report_to_subscribers, 'cron', hour=15, minute=10)
 
     # 开始运行调度器
     scheduler.start()
