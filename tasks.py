@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 
 from commands import (
@@ -17,6 +18,10 @@ async def update_fund_details():
     print(f"Updating fund details at {datetime.now()}")
 
 
+def sync_update_fund_details():
+    asyncio.run(update_fund_details())
+
+
 async def send_daily_report_to_subscribers():
     # 获取所有订阅了 daily report 的用户
     subscribers = await get_subscribers()
@@ -25,3 +30,7 @@ async def send_daily_report_to_subscribers():
     for user_id in subscribers:
         message = await get_daily_report(user_id)
         await send_message_to_user(user_id, message)  # 你可能需要实现这个函数
+
+
+def sync_send_daily_report_to_subscribers():
+    asyncio.run(send_daily_report_to_subscribers())

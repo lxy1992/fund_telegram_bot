@@ -9,7 +9,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 from commands import FundApi, get_daily_report, list_subscriptions_for_user, subscribe_user_fund, unsubscribe_user_fund
 from config import load_config
-from tasks import send_daily_report_to_subscribers, update_fund_details
+from tasks import sync_send_daily_report_to_subscribers, sync_update_fund_details
 
 config = load_config("config.yml")
 # Telegram bot配置
@@ -140,9 +140,9 @@ if __name__ == '__main__':
     scheduler = BackgroundScheduler()
 
     # 添加一个定时任务，从早上9点到下午4点，每小时运行一次update_fund_details函数
-    scheduler.add_job(update_fund_details, 'cron', day_of_week='mon-fri', hour='9-16', minute=0)
+    scheduler.add_job(sync_update_fund_details, 'cron', day_of_week='mon-fri', hour='9-16', minute=0)
     # 添加一个定时任务，每天下午2点运行 send_daily_report_to_subscribers 函数
-    scheduler.add_job(send_daily_report_to_subscribers, 'cron', hour=15, minute=10)
+    scheduler.add_job(sync_send_daily_report_to_subscribers, 'cron', hour=15, minute=10)
 
     # 开始运行调度器
     scheduler.start()
