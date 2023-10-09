@@ -8,7 +8,7 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH="/app:${PYTHONPATH}" \
     PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple" \
-    C_FORCE_ROOT=1 \
+    C_FORCE_ROOT=1
 
 # - 更换源，构建基础环境
 RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
