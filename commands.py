@@ -1,11 +1,13 @@
 import asyncio
 import datetime
 import decimal
+import json
+import re
 import ssl
 from decimal import Decimal, ROUND_DOWN
 
 import requests
-from sqlalchemy import and_, delete, distinct, or_, select, update
+from sqlalchemy import NullPool, and_, distinct, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from telegram import Bot
@@ -23,7 +25,7 @@ DATABASE_URL = db_config['url']
 ssl_args = {
     'ssl': ssl.create_default_context(cafile='cacert.pem')
 }
-engine = create_async_engine(DATABASE_URL, connect_args=ssl_args, echo=True)
+engine = create_async_engine(DATABASE_URL, connect_args=ssl_args, echo=True, poolclass=NullPool)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
@@ -65,6 +67,29 @@ class FundApi:
             return response.json()["data"]
         else:
             response.raise_for_status()
+
+    @staticmethod
+    def get_real_time_fund(codes):
+        res_data = []
+        for code in codes:
+            url = f"http://fundgz.1234567.com.cn/js/{code}.js"
+            # 浏览器头
+            headers = {'content-type': 'application/json',
+                       'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:22.0) Gecko/20100101 Firefox/22.0'}
+
+            r = requests.get(url, headers=headers)
+            # 返回信息
+            content = r.text
+            # 正则表达式
+            pattern = r'^jsonpgz\((.*)\)'
+            # 查找结果
+            search = re.findall(pattern, content)
+            # 遍历结果
+            print(search)
+            if len(search) > 0:
+                data = json.loads(search[0])
+                res_data.append(data)
+        return res_data
 
 
 async def subscribe_user_fund(user_id, fund_code, shares):
@@ -150,6 +175,7 @@ async def get_daily_report(user_id):
 
         report = []
         total_amount = 0
+        total_expect_change_amount = 0
         if len(subscribed_funds_list) == 0:
             return "您当前没有订阅任何基金。"
 
@@ -160,10 +186,18 @@ async def get_daily_report(user_id):
                 select(FundDetail).where(FundDetail.code == fund_code)
             )
             fund_detail = fund_detail.scalar_one()
+            data = FundApi().get_real_time_fund([fund_code])
 
             # 计算估计的涨跌金额
-            expect_worth = Decimal(str(fund_detail.expect_worth))
-            expect_growth = Decimal(str(fund_detail.expect_growth)) / 100
+            if len(data) > 0:
+                expect_worth = Decimal(str(data[0]["gsz"]))
+                expect_growth = Decimal(str(data[0]["gszzl"])) / 100
+                expect_growth_str = str(data[0]["gszzl"])
+            else:
+                expect_worth = Decimal(str(fund_detail.expect_worth))
+                expect_growth = Decimal(str(fund_detail.expect_growth)) / 100
+                expect_growth_str = str(fund_detail.expect_growth)
+
             expect_yesterday_worth = (expect_worth / (1 + expect_growth)).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
             expect_growth_value = (expect_yesterday_worth * expect_growth).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
             expect_change_amount = (shares * expect_growth_value).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
@@ -181,12 +215,14 @@ async def get_daily_report(user_id):
                 "change_amount": change_amount,
                 "expect_change_amount": expect_change_amount,
                 "shares": shares,
-                "expect_worth": fund_detail.expect_worth,
+                "expect_growth": fund_detail.expect_growth,
+                "expect_worth": expect_growth_str,
                 "net_worth": fund_detail.net_worth,
             })
 
             # 计算总金额
             total_amount += change_amount
+            total_expect_change_amount += expect_change_amount
         # 格式化报告并返回给用户
         message = "日报：\n---------------------\n"
         for item in report:
@@ -194,12 +230,14 @@ async def get_daily_report(user_id):
                 f"{item['fund_name']}({item['fund_code']}): \n"
                 f"实际涨跌金额={item['change_amount']}元, \n"
                 f"预估涨跌金额={item['expect_change_amount']}元, \n"
+                f"预估涨跌百分比={item['expect_growth']}%, \n"
                 f"持有份数={item['shares']}, \n"
                 f"预估净值={item['expect_worth']}, \n"
                 f"实际净值={item['net_worth']}\n"
                 "---------------------\n"
             )
-        message += f"总金额：{total_amount}元"
+        message += f"总金额：{total_amount}元\n"
+        message += f"预估总金额：{total_expect_change_amount}元\n"
 
         return message
 
@@ -223,9 +261,7 @@ async def update_fund_detail_in_db(fund_data):
                 name=fund_data["name"],
                 type=fund_data["type"],
                 net_worth=fund_data["netWorth"],
-                expect_worth=fund_data["expectWorth"],
                 total_worth=fund_data["totalWorth"],
-                expect_growth=fund_data["expectGrowth"],
                 day_growth=fund_data["dayGrowth"],
                 last_week_growth=fund_data["lastWeekGrowth"],
                 last_month_growth=fund_data["lastMonthGrowth"],
@@ -239,6 +275,23 @@ async def update_fund_detail_in_db(fund_data):
                 fund_scale=fund_data["fundScale"],
                 worth_date=datetime.datetime.strptime(fund_data["netWorthDate"], "%Y-%m-%d"),
                 # 如果API返回其他日期字段，也按照上面的方式处理
+            )
+        )
+        # 执行更新语句
+        await session.execute(stmt)
+        # 提交事务
+        await session.commit()
+
+
+async def update_fund_realtime_in_db(fund_data):
+    async with async_session() as session:
+        # 构建更新语句
+        stmt = (
+            update(FundDetail).
+            where(FundDetail.code == fund_data["fundcode"]).
+            values(
+                expect_worth=fund_data["gsz"],
+                expect_growth=fund_data["gszzl"],
             )
         )
         # 执行更新语句
