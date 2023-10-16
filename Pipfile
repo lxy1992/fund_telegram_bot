@@ -10,8 +10,14 @@ apscheduler = "*"
 python-telegram-bot = "*"
 aiomysql = "*"
 pyyaml = "*"
+matplotlib = "*"
+greenlet = "*"
+numpy = "*"
 
 [dev-packages]
 
 [requires]
 python_version = "3.10"
+
+[pipenv]
+allow_prereleases = true

@@ -1,6 +1,7 @@
 import datetime
 
 from sqlalchemy import Column, DateTime, Float, Integer, Numeric, String
+from sqlalchemy.types import JSON
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
@@ -31,6 +32,7 @@ class FundDetail(Base):
     million_copies_income = Column(Float)
     million_copies_income_date = Column(DateTime)
     seven_days_year_income = Column(Float)
+    history_data = Column(JSON)
     deleted_at = Column(DateTime, nullable=True, default=None)
 
 
