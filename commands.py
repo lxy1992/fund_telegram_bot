@@ -198,11 +198,11 @@ async def get_daily_report(user_id, need_diagram=False):
             # 计算估计的涨跌金额
             if len(data) > 0:
                 expect_worth = Decimal(str(data[0]["gsz"]))
-                expect_growth = Decimal(str(data[0]["gszzl"])) / 100
+                expect_growth = Decimal(str(data[0]["gszzl"]))
                 expect_growth_str = str(data[0]["gszzl"])
             else:
                 expect_worth = Decimal(str(fund_detail.expect_worth))
-                expect_growth = Decimal(str(fund_detail.expect_growth)) / 100
+                expect_growth = Decimal(str(fund_detail.expect_growth))
                 expect_growth_str = str(fund_detail.expect_growth)
 
             expect_yesterday_worth = (expect_worth / (1 + expect_growth)).quantize(Decimal('0.0001'),
