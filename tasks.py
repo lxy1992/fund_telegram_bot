@@ -42,8 +42,8 @@ async def send_daily_report_to_subscribers():
 
     # 对每个用户发送 daily report
     for user_id in subscribers:
-        message = await get_daily_report(user_id)
-        await send_message_to_user(user_id, message)  # 你可能需要实现这个函数
+        message, image_path = await get_daily_report(user_id, True)
+        await send_message_to_user(user_id, message, image_path)  # 你可能需要实现这个函数
 
 
 def sync_send_daily_report_to_subscribers():

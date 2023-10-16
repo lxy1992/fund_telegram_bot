@@ -26,7 +26,7 @@ logging.basicConfig(
 
 async def daily_report(update_ins: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update_ins.effective_user.id
-    message = await get_daily_report(user_id)
+    message, _ = await get_daily_report(user_id, False)
     await context.bot.send_message(chat_id=update_ins.effective_chat.id, text=message)
 
 

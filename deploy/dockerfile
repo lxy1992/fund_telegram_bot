@@ -30,5 +30,10 @@ WORKDIR /app
 # Copy the current directory contents into the container at /app
 COPY . /app
 
+COPY fonts/Microsoft_YaHei.ttf /usr/share/fonts/
+
+# 更新字体缓存
+RUN fc-cache -f -v
+
 # Run telebot.py when the container launches
 CMD ["python", "main.py"]

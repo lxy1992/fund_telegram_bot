@@ -7,10 +7,11 @@ import ssl
 from decimal import Decimal, ROUND_DOWN
 
 import requests
+import matplotlib.pyplot as plt
 from sqlalchemy import NullPool, and_, distinct, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from telegram import Bot
+from telegram import Bot, InputFile
 
 from config import load_config
 from models import FundDetail, UserFund
@@ -164,7 +165,7 @@ async def fetch_and_update_fund_data(fund_code):
         await session.commit()
 
 
-async def get_daily_report(user_id):
+async def get_daily_report(user_id, need_diagram=False):
     async with async_session() as session:
         # 获取用户订阅的基金
         subscribed_funds = await session.execute(
@@ -176,16 +177,22 @@ async def get_daily_report(user_id):
         report = []
         total_amount = 0
         total_expect_change_amount = 0
+        fund_pic_data = []
         if len(subscribed_funds_list) == 0:
-            return "您当前没有订阅任何基金。"
+            return "您当前没有订阅任何基金。", None
 
         # 获取基金详情并计算涨跌金额
         for fund in subscribed_funds_list:
             fund_code, shares = fund
             fund_detail = await session.execute(
-                select(FundDetail).where(FundDetail.code == fund_code)
+                select(FundDetail.code,
+                       FundDetail.name,
+                       FundDetail.net_worth,
+                       FundDetail.expect_worth,
+                       FundDetail.expect_growth,
+                       FundDetail.day_growth).where(FundDetail.code == fund_code)
             )
-            fund_detail = fund_detail.scalar_one()
+            fund_detail = fund_detail.first()
             data = FundApi().get_real_time_fund([fund_code])
 
             # 计算估计的涨跌金额
@@ -198,8 +205,10 @@ async def get_daily_report(user_id):
                 expect_growth = Decimal(str(fund_detail.expect_growth)) / 100
                 expect_growth_str = str(fund_detail.expect_growth)
 
-            expect_yesterday_worth = (expect_worth / (1 + expect_growth)).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
-            expect_growth_value = (expect_yesterday_worth * expect_growth).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
+            expect_yesterday_worth = (expect_worth / (1 + expect_growth)).quantize(Decimal('0.0001'),
+                                                                                   rounding=ROUND_DOWN)
+            expect_growth_value = (expect_yesterday_worth * expect_growth).quantize(Decimal('0.0001'),
+                                                                                    rounding=ROUND_DOWN)
             expect_change_amount = (shares * expect_growth_value).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
             # 计算实际的涨跌金额
             net_worth = Decimal(str(fund_detail.net_worth))
@@ -207,6 +216,12 @@ async def get_daily_report(user_id):
             yesterday_worth = (net_worth / (1 + day_growth)).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
             real_growth_value = (yesterday_worth * day_growth).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
             change_amount = (shares * real_growth_value).quantize(Decimal('0.0001'), rounding=ROUND_DOWN)
+
+            if need_diagram:
+                fund_pic_data.append({
+                    "name": fund_detail.name,
+                    "fund_expect_growth": expect_growth,
+                    "fund_change_amount": expect_change_amount})
 
             # 添加到报告中
             report.append({
@@ -238,8 +253,57 @@ async def get_daily_report(user_id):
             )
         message += f"总金额：{total_amount}元\n"
         message += f"预估总金额：{total_expect_change_amount}元\n"
+        filename = None
+        if need_diagram:
+            # 按预计涨跌排序
+            fund_pic_data.sort(key=lambda x: x['fund_expect_growth'], reverse=False)
 
-        return message
+            # 提取数据用于绘图
+            funds_names = [fund['name'] for fund in fund_pic_data]
+            fund_expect_growths = [fund['fund_expect_growth'] for fund in fund_pic_data]
+
+            # 创建一个 1x2 的子图网格（1行，2列）
+            fig, axes = plt.subplots(2, 1, figsize=(10, 10))
+
+            # 选择一个支持中文的字体
+            plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'Heiti TC', 'PingFang SC']  # 尝试使用不同的字体
+            plt.rcParams['axes.unicode_minus'] = False  # 确保负号 '-' 正确显示
+
+            # 子图 1：预计涨跌
+            axes[0].barh(funds_names, fund_expect_growths, color=['r' if x >= 0 else 'g' for x in fund_expect_growths])
+            axes[0].set_title('预计涨跌')
+            axes[0].set_xlabel('涨跌 (%)')
+            axes[0].set_ylabel('基金')
+
+            # 添加数据标签
+            for i, v in enumerate(fund_expect_growths):
+                axes[0].text(v, i, f"{v}%", va='center', color='white' if abs(v) > 2 else 'black')
+
+            # 按实际涨跌排序
+            fund_pic_data.sort(key=lambda x: x['fund_change_amount'], reverse=False)
+
+            # 提取数据用于绘图
+            funds_names = [fund['name'] for fund in fund_pic_data]
+            fund_change_amounts = [fund['fund_change_amount'] for fund in fund_pic_data]
+
+            # 子图 2：实际涨跌
+            axes[1].barh(funds_names, fund_change_amounts, color=['r' if x >= 0 else 'g' for x in fund_change_amounts])
+            axes[1].set_title('预计涨跌金额')
+            axes[1].set_xlabel('涨跌 (元)')
+
+            # 添加数据标签
+            for i, v in enumerate(fund_change_amounts):
+                axes[1].text(v, i, f"{v}元", va='center', color='white' if abs(v) > 2 else 'black')
+
+            # 调整子图之间的间距
+            plt.tight_layout(pad=4.0)
+
+            current_date = datetime.datetime.now().strftime("%Y%m%d")
+            filename = f"{user_id}_{current_date}_fund_growth.png"
+            # 保存图表为文件
+            plt.tight_layout()
+            plt.savefig(filename)
+        return message, filename
 
 
 async def get_all_fund_codes_from_db():
@@ -274,6 +338,7 @@ async def update_fund_detail_in_db(fund_data):
                 manager=fund_data["manager"],
                 fund_scale=fund_data["fundScale"],
                 worth_date=datetime.datetime.strptime(fund_data["netWorthDate"], "%Y-%m-%d"),
+                history_data=fund_data["netWorthData"],
                 # 如果API返回其他日期字段，也按照上面的方式处理
             )
         )
@@ -308,10 +373,12 @@ async def get_subscribers():
         return subscribers
 
 
-async def send_message_to_user(user_id, message):
+async def send_message_to_user(user_id, message, image_path):
     bot = Bot(token=TOKEN)  # 使用你的 Telegram bot token
 
     await bot.send_message(chat_id=user_id, text=message)
+    with open(image_path, 'rb') as image_file:
+        await bot.send_photo(chat_id=user_id, photo=InputFile(image_file))
 
 
 async def list_subscriptions_for_user(user_id):
