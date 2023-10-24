@@ -230,7 +230,7 @@ async def get_daily_report(user_id, need_diagram=False):
                 "change_amount": change_amount,
                 "expect_change_amount": expect_change_amount,
                 "shares": shares,
-                "expect_growth": expect_growth,
+                "expect_growth": expect_growth * 100,
                 "expect_worth": expect_growth_str,
                 "net_worth": fund_detail.net_worth,
             })
