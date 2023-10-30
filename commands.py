@@ -277,7 +277,7 @@ async def get_daily_report(user_id, need_diagram=False):
 
             # 添加数据标签
             for i, v in enumerate(fund_expect_growths):
-                axes[0].text(v, i, f"{v}%", va='center', color='white' if abs(v) > 2 else 'black')
+                axes[0].text(v, i, f"{v}%", va='center', color='black')
 
             # 按实际涨跌排序
             fund_pic_data.sort(key=lambda x: x['fund_change_amount'], reverse=False)
@@ -293,7 +293,7 @@ async def get_daily_report(user_id, need_diagram=False):
 
             # 添加数据标签
             for i, v in enumerate(fund_change_amounts):
-                axes[1].text(v, i, f"{v}元", va='center', color='white' if abs(v) > 2 else 'black')
+                axes[1].text(v, i, f"{v}元", va='center', color='black')
 
             # 调整子图之间的间距
             plt.tight_layout(pad=4.0)
