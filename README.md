@@ -26,6 +26,23 @@
 
 ## 使用方法
 
+### 制作docker image
+```shell
+make build
+```
+如果你是ARM架构的Mac用户，可以用
+```shell
+make mac_build
+```
+
+### 运行docker image
+```shell
+docker run -v /root/config/config.yml:/app/config.yml -d  --restart=always fund-bot:0.1.22
+```
+PS：0.1.22是docker image的tag，你可以根据自己的情况修改。
+
+### Bot的命令
+
 1. **启动 Bot**: 在 Telegram 中搜索并启动基金 Bot。
 2. **搜索基金**: 使用 `/search [基金名称或代码]` 命令来搜索基金。 
 3. **订阅基金**: 使用 `/subscribe [基金代码] [购买份数]` 命令来订阅基金。
