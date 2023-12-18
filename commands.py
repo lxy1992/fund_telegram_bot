@@ -11,10 +11,10 @@ import matplotlib.pyplot as plt
 from sqlalchemy import NullPool, and_, distinct, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from telegram import Bot, InputFile
+from telegram import Bot, InputFile, error
 
 from config import load_config
-from models import FundDetail, UserFund
+from models import AlertSettings, BuyRecord, FundDetail, UserConfig, UserFund
 
 config = load_config("config.yml")
 db_config = config['database']
@@ -378,7 +378,11 @@ async def send_message_to_user(user_id, message, image_path):
 
     await bot.send_message(chat_id=user_id, text=message)
     with open(image_path, 'rb') as image_file:
-        await bot.send_photo(chat_id=user_id, photo=InputFile(image_file))
+        try:
+            await bot.send_photo(chat_id=user_id, photo=InputFile(image_file))
+        except error.Forbidden:
+            print(f"无法发送图片给用户 {user_id}，请检查是否已经开启了对话权限。")
+            pass
 
 
 async def list_subscriptions_for_user(user_id):
@@ -414,3 +418,86 @@ async def unsubscribe_user_fund(user_id, fund_code):
 
         await session.commit()
         return f"已取消订阅代码为 {fund_code} 的基金。"
+
+
+async def register_user(user_id):
+    async with async_session() as session:
+        new_user = UserConfig(user_id=user_id)
+        session.add(new_user)
+        await session.commit()
+    return "注册成功"
+
+
+async def update_user_config(user_id, new_config):
+    async with async_session() as session:
+        await session.execute(
+            update(UserConfig).
+            where(UserConfig.user_id == user_id).
+            values(**new_config)
+        )
+        await session.commit()
+
+
+async def add_or_update_buy_record(user_id, fund_code, shares, price, fund_name=None):
+    async with async_session() as session:
+        # 检查是否已存在记录
+        stmt = select(BuyRecord).where(and_(BuyRecord.user_id == user_id, BuyRecord.fund_code == fund_code))
+        result = await session.execute(stmt)
+        record = result.scalar_one_or_none()
+
+        if record:
+            # 更新现有记录
+            record.shares = shares
+            record.price = price
+            record.fund_name = fund_name
+        else:
+            # 添加新记录
+            new_record = BuyRecord(user_id=user_id, fund_code=fund_code, shares=shares, price=price,
+                                   fund_name=fund_name)
+            session.add(new_record)
+
+        await session.commit()
+
+
+async def get_buy_records(user_id):
+    async with async_session() as session:
+        stmt = select(BuyRecord).where(BuyRecord.user_id == user_id)
+        result = await session.execute(stmt)
+        return result.scalars().all()
+
+
+async def set_alert(user_id, fund_code, alert_number, alert_type, fund_name=None):
+    async with async_session() as session:
+        # 检查是否已存在警报设置
+        stmt = select(AlertSettings).where(and_(AlertSettings.user_id == user_id, AlertSettings.fund_code == fund_code))
+        result = await session.execute(stmt)
+        alert = result.scalar_one_or_none()
+
+        if alert:
+            # 更新现有警报
+            alert.alert_number = alert_number
+            alert.alert_type = alert_type
+            alert.fund_name = fund_name
+        else:
+            # 添加新警报
+            new_alert = AlertSettings(user_id=user_id, fund_code=fund_code, alert_number=alert_number,
+                                      alert_type=alert_type, fund_name=fund_name)
+            session.add(new_alert)
+
+        await session.commit()
+
+
+async def check_alerts_and_notify():
+    async with async_session() as session:
+        alerts = await session.execute(select(AlertSettings))
+        for alert in alerts.scalars():
+            # 检查基金当前价值与警报设置比较
+            fund_value = ...  # 获取基金当前价值
+            if should_notify(alert, fund_value):  # 假设这是一个函数来判断是否应该通知用户
+                message = f"您的警报 {alert.fund_code} 已触发"
+                await send_message_to_user(alert.user_id, message)
+
+
+async def should_notify(alert, fund_value):
+    # 根据警报类型和设置判断是否需要通知用户
+    pass

@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, Numeric, String
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, Numeric, String
 from sqlalchemy.types import JSON
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -46,3 +46,34 @@ class UserFund(Base):
     unsubscribed_at = Column(DateTime, nullable=True, default=None)
     shares = Column(Numeric, default=0.00)
     fund_name = Column(String, nullable=True)
+
+
+class BuyRecord(Base):
+    __tablename__ = 'buy_records'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, index=True)  # 添加索引
+    fund_code = Column(String(10))
+    created_at = Column(DateTime, default=datetime.datetime.now())
+    shares = Column(Numeric, default=0.00)
+    price = Column(Numeric, default=0.00)
+    fund_name = Column(String, nullable=True)
+    deleted_at = Column(DateTime, nullable=True, default=None)
+
+
+class AlertSettings(Base):
+    __tablename__ = 'alert_settings'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, index=True)  # 添加索引
+    fund_code = Column(String(10))
+    created_at = Column(DateTime, default=datetime.datetime.now())
+    alert_number = Column(Numeric, default=0.00)
+    alert_type = Column(String(10), default='price_percentage')
+    fund_name = Column(String, nullable=True)
+    deleted_at = Column(DateTime, nullable=True, default=None)
+
+
+class UserConfig(Base):
+    __tablename__ = 'user_configs'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, index=True)  # 添加索引
+    daily_report = Column(Boolean, default=0)

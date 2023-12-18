@@ -6,13 +6,15 @@ name = "pypi"
 [packages]
 sqlalchemy = "*"
 requests = "*"
-apscheduler = "*"
+apscheduler = "==3.10.4"
 python-telegram-bot = "*"
 aiomysql = "*"
 pyyaml = "*"
 matplotlib = "*"
 greenlet = "*"
 numpy = "*"
+alembic = "*"
+pymysql = "*"
 
 [dev-packages]
 

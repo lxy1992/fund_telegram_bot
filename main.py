@@ -7,7 +7,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-from commands import FundApi, get_daily_report, list_subscriptions_for_user, subscribe_user_fund, unsubscribe_user_fund
+from commands import (
+    FundApi, get_daily_report, list_subscriptions_for_user, register_user, subscribe_user_fund,
+    unsubscribe_user_fund, update_user_config)
 from config import load_config
 from tasks import (
     sync_send_daily_report_to_subscribers, sync_update_fund_details, sync_update_realtime_fund_details)
@@ -119,6 +121,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await context.bot.send_message(chat_id=update.effective_chat.id, text=welcome_text)
 
+async def config_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = await update_user_config(update.effective_user.id, )
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+
+
+async def signup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = await register_user(update.effective_user.id)
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
@@ -129,6 +140,8 @@ if __name__ == '__main__':
     unsubscribe_handler = CommandHandler(['unsubscribe', 'unsub'], unsubscribe)
     help_handler = CommandHandler(['help', 'h'], help_command)
     start_handler = CommandHandler('start', start_command)
+    signup_handler = CommandHandler('signup', signup_command)
+    user_config_handler = CommandHandler('config', signup_command)
     application.add_handler(start_handler)
     application.add_handler(help_handler)
     application.add_handler(search_handler)
@@ -136,6 +149,7 @@ if __name__ == '__main__':
     application.add_handler(daily_report_handler)
     application.add_handler(list_subscriptions_handler)
     application.add_handler(unsubscribe_handler)
+    application.add_handler(signup_handler)
 
     # 使用APScheduler来运行定时任务
     scheduler = BackgroundScheduler()
