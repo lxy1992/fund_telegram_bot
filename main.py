@@ -64,7 +64,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message += f"代码：{fund['code']}\n"
             message += f"类型：{fund['type']}\n"
             message += f"净值：{fund['netWorth']}\n"
-            message += f"预期增长：{fund['expectGrowth']}\n"
+            message += f"预期增长：{fund.get('expectGrowth', '0')}\n"
             message += "---------------------\n"
 
         # Send the message to the user
