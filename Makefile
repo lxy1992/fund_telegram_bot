@@ -1,5 +1,5 @@
 build:
-	docker build -t fund-bot:0.1.21 -f deploy/dockerfile .
+	docker build -t fund-bot:0.1.25 -f deploy/dockerfile .
 
 mac_build:
 	 docker buildx build --load --platform linux/amd64 -t fund-bot:0.1.21 -f deploy/Dockerfile .
