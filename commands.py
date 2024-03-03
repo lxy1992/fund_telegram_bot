@@ -20,6 +20,7 @@ config = load_config("config.yml")
 db_config = config['database']
 bot_config = config['telegram_bot']
 TOKEN = bot_config['token']
+API = config["fund_api"]
 
 DATABASE_URL = db_config['url']
 # SSL参数
@@ -31,7 +32,7 @@ async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession
 
 
 class FundApi:
-    BASE_URL = 'https://api.doctorxiong.club/v1/fund'  # 请替换为实际的API基础URL
+    BASE_URL = API["base_url"]
 
     @staticmethod
     def search_funds(keyword):
@@ -193,6 +194,8 @@ async def get_daily_report(user_id, need_diagram=False):
                        FundDetail.day_growth).where(FundDetail.code == fund_code)
             )
             fund_detail = fund_detail.first()
+            if not fund_detail:
+                continue
             data = FundApi().get_real_time_fund([fund_code])
 
             # 计算估计的涨跌金额
