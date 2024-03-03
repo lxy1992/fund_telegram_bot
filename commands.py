@@ -137,7 +137,7 @@ async def fetch_and_update_fund_data(fund_code):
             net_worth=data["netWorth"],
             expect_worth=data["expectWorth"],
             total_worth=data["totalWorth"],
-            expect_growth=data["expectGrowth"],
+            expect_growth=data.get("expectGrowth", "0"),
             day_growth=data["dayGrowth"],
             last_week_growth=data["lastWeekGrowth"],
             last_month_growth=data["lastMonthGrowth"],
