@@ -88,7 +88,7 @@ class FundApi:
             search = re.findall(pattern, content)
             # 遍历结果
             print(search)
-            if len(search) > 0:
+            if len(search) > 0 and search[0] != "":
                 data = json.loads(search[0])
                 res_data.append(data)
         return res_data
